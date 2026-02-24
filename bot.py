@@ -6,7 +6,7 @@ Requirements:
   - python 3.10+
   - python-telegram-bot >= 20.0
 Install:
-  pip install python-telegram-bot --upgrade
+  pip install -r requirements.txt
 Run:
   export BOT_TOKEN="12345:ABC..."
   python bot.py
@@ -21,12 +21,14 @@ import asyncio
 from datetime import datetime, timedelta
 from html import escape
 
+from dotenv import load_dotenv
+
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ParseMode,
 )
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -37,27 +39,31 @@ from telegram.ext import (
 )
 
 # ----------------- CONFIG -----------------
-from dotenv import load_dotenv
-
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
+# ADMIN_IDS from .env (comma separated). Fallback empty list.
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 
-DROP_COUNT = int(os.getenv("DROP_COUNT", 10))
+# default drop count can be overridden by env
+DROP_COUNT = None
+if os.getenv("DROP_COUNT") and os.getenv("DROP_COUNT").isdigit():
+    DROP_COUNT = int(os.getenv("DROP_COUNT"))
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+# data file (must be defined)
+DATA_FILE = os.getenv("DATA_FILE", "data.json")
 
 # ----------------- LOGGING -----------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.DEBUG if DEBUG else logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
 # ----------------- GLOBAL STATE -----------------
-# load_data will populate `data`
 data_lock = asyncio.Lock()  # used to serialize writes
 
 
@@ -73,7 +79,6 @@ def load_data():
     else:
         obj = {}
 
-    # ensure keys exist and types are safe
     default = {
         "users": {},  # keys are strings of user_id
         "groups": {},  # keys are strings of chat_id
@@ -97,6 +102,10 @@ def load_data():
     except Exception:
         obj["sudos"] = []
 
+    # apply DROP_COUNT env override if provided
+    if DROP_COUNT is not None:
+        obj["drop_count"] = DROP_COUNT
+
     return obj
 
 
@@ -114,7 +123,6 @@ async def save_data_safe():
             os.replace(tmp, DATA_FILE)
         except Exception:
             logger.exception("Failed to save data to disk")
-            # best-effort: remove tmp if exists
             try:
                 if os.path.exists(tmp):
                     os.remove(tmp)
@@ -844,7 +852,7 @@ async def message_counter(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"{rarity_emoji} <b>{masked}</b>\n"
                     f"🎬 {safe_name(card.get('movie'))}\n"
                     f"✨ {safe_name(card.get('rarity'))}\n\n"
-                    f"💡 /slime &lt;character name&gt; နဲ့ယူပါ!\n"
+                    f"💡 /slime <character name> နဲ့ယူပါ!\n"
                     f"⏰ 10 seconds cooldown"
                 ),
                 parse_mode=ParseMode.HTML,
@@ -871,7 +879,7 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not caption or not photo_obj:
         await update.message.reply_text(
-            "❌ အသုံးပြုနည်း:\nPhoto နဲ့ caption ပေးပို့ပါ:\n`Character Name | Movie Name | Rarity`"
+            "❌ အသုံးပြုနည်း:\nPhoto နဲ့ caption ပေးပို့ပါ:\nCharacter Name | Movie Name | Rarity"
         )
         return
 

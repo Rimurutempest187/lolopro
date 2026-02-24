@@ -37,14 +37,17 @@ from telegram.ext import (
 )
 
 # ----------------- CONFIG -----------------
-# Put admin Telegram IDs here (ints)
-ADMIN_IDS = [1812962224]  # change as needed
+from dotenv import load_dotenv
 
-# Load bot token from environment
-BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
+load_dotenv()
 
-# Data file
-DATA_FILE = "bot_data.json"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
+
+DROP_COUNT = int(os.getenv("DROP_COUNT", 10))
+
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # ----------------- LOGGING -----------------
 logging.basicConfig(
